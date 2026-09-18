@@ -4,6 +4,7 @@ import com.grain.depot.dto.BizException;
 import com.grain.depot.entity.GrainBatch;
 import com.grain.depot.entity.Granary;
 import com.grain.depot.entity.StockMove;
+import com.grain.depot.repository.FumigationRepository;
 import com.grain.depot.repository.GrainBatchRepository;
 import com.grain.depot.repository.GranaryRepository;
 import com.grain.depot.repository.StockMoveRepository;
@@ -17,12 +18,21 @@ public class StockMoveService {
     private final StockMoveRepository moves;
     private final GrainBatchRepository batches;
     private final GranaryRepository granaries;
+    private final FumigationRepository fumigations;
 
     public StockMoveService(StockMoveRepository moves, GrainBatchRepository batches,
-                            GranaryRepository granaries) {
+                            GranaryRepository granaries, FumigationRepository fumigations) {
         this.moves = moves;
         this.batches = batches;
         this.granaries = granaries;
+        this.fumigations = fumigations;
+    }
+
+    /** 密闭期间出入库全停——开单和执行两道都要拦。 */
+    private void assertNotSealed(Long granaryId, String granaryName) {
+        if (fumigations.existsBySealedGranaryId(granaryId)) {
+            throw new BizException("仓房 " + granaryName + " 正在熏蒸密闭中，散气复检合格前禁止出入库作业");
+        }
     }
 
     public List<StockMove> list(Long batchId, String moveType, String status) {
@@ -55,6 +65,9 @@ public class StockMoveService {
         }
         GrainBatch batch = batches.findById(input.batchId)
                 .orElseThrow(() -> new BizException("批次不存在"));
+        Granary batchGranary = granaries.findById(batch.granaryId)
+                .orElseThrow(() -> new BizException("仓房不存在"));
+        assertNotSealed(batch.granaryId, batchGranary.name);
         if ("出库".equals(input.moveType) && input.quantity > batch.quantity) {
             throw new BizException("这批粮库里只有 " + batch.quantity + " 吨，出不了 "
                     + input.quantity + " 吨");
@@ -78,6 +91,10 @@ public class StockMoveService {
         }
         GrainBatch batch = batches.findById(move.batchId)
                 .orElseThrow(() -> new BizException("批次不存在"));
+        Granary batchGranary = granaries.findById(batch.granaryId)
+                .orElseThrow(() -> new BizException("仓房不存在"));
+        // 单子可能是密闭之前开的：执行那一刻仍要拦。
+        assertNotSealed(batch.granaryId, batchGranary.name);
 
         if ("出库".equals(move.moveType)) {
             if (move.quantity > batch.quantity) {

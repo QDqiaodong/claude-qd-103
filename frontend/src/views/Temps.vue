@@ -28,10 +28,13 @@
             <td
               v-for="d in dates"
               :key="d"
-              :class="{ hot: isHot(g.id, d), empty: !cell(g.id, d) }"
+              :class="{ hot: isHot(g.id, d), seal: isSealTemp(g.id, d), empty: !cell(g.id, d) }"
               :title="tip(g.id, d)"
             >
-              <span v-if="cell(g.id, d)">{{ cell(g.id, d).temperature }}</span>
+              <template v-if="cell(g.id, d)">
+                <span>{{ cell(g.id, d).temperature }}</span>
+                <i v-if="isSealTemp(g.id, d)" class="sealflag">熏</i>
+              </template>
               <span v-else>—</span>
             </td>
             <td class="avg">{{ avg(g.id) }}</td>
@@ -43,6 +46,7 @@
     <div class="legend">
       <span><i class="dot normal"></i>正常（＜26℃）</span>
       <span><i class="dot hot"></i>超温（≥26℃）</span>
+      <span><i class="dot seal"></i>密闭期测温（标「熏」）</span>
       <span><i class="dot none"></i>当天没测</span>
       <span class="grow" />
       <span class="note">鼠标停在格子上能看到湿度和记录人</span>
@@ -68,7 +72,10 @@
           <el-input v-model="form.recorder" placeholder="如 李保管" />
         </el-form-item>
       </el-form>
-      <div class="dlg-tip">登记后结论（正常 / 超温）由服务端自动判定，不用手填。</div>
+      <div class="dlg-tip">
+        登记后结论（正常 / 超温）由服务端自动判定，不用手填；
+        密闭中的仓房仍可测温，系统会自动标成「密闭期测温」，同仓同一天仍只能一条。
+      </div>
       <template #footer>
         <el-button @click="visible = false">取消</el-button>
         <el-button type="primary" @click="save">提交</el-button>
@@ -99,10 +106,16 @@ function isHot(granaryId, date) {
   return !!c && c.temperature >= 26
 }
 
+function isSealTemp(granaryId, date) {
+  const c = cell(granaryId, date)
+  return !!c && c.duringFumigation
+}
+
 function tip(granaryId, date) {
   const c = cell(granaryId, date)
   if (!c) return '这天还没测'
-  return `湿度 ${c.humidity}%　${c.recorder}　${c.result}`
+  const tag = c.duringFumigation ? '【密闭期测温】　' : ''
+  return `${tag}湿度 ${c.humidity}%　${c.recorder}　${c.result}`
 }
 
 function avg(granaryId) {
@@ -247,6 +260,24 @@ td.hot {
   color: #f56c6c;
   font-weight: 700;
 }
+td.seal {
+  background: #fdf6ec;
+  color: #b88230;
+  font-weight: 700;
+}
+.sealflag {
+  display: inline-block;
+  font-style: normal;
+  font-size: 10px;
+  line-height: 13px;
+  background: #e6a23c;
+  color: #fff;
+  border-radius: 2px;
+  padding: 0 3px;
+  margin-left: 3px;
+  vertical-align: top;
+  font-family: inherit;
+}
 td.avg,
 th.avg {
   background: #fafbfc;
@@ -276,6 +307,10 @@ th.avg {
 .dot.hot {
   background: #fef0f0;
   border: 1px solid #f56c6c;
+}
+.dot.seal {
+  background: #fdf6ec;
+  border: 1px solid #e6a23c;
 }
 .dot.none {
   background: #f5f7fa;

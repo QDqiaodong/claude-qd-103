@@ -3,6 +3,7 @@ package com.grain.depot.service;
 import com.grain.depot.dto.BizException;
 import com.grain.depot.entity.Granary;
 import com.grain.depot.entity.TempRecord;
+import com.grain.depot.repository.FumigationRepository;
 import com.grain.depot.repository.GranaryRepository;
 import com.grain.depot.repository.TempRecordRepository;
 import java.time.LocalDate;
@@ -18,10 +19,13 @@ public class TempService {
 
     private final TempRecordRepository records;
     private final GranaryRepository granaries;
+    private final FumigationRepository fumigations;
 
-    public TempService(TempRecordRepository records, GranaryRepository granaries) {
+    public TempService(TempRecordRepository records, GranaryRepository granaries,
+                       FumigationRepository fumigations) {
         this.records = records;
         this.granaries = granaries;
+        this.fumigations = fumigations;
     }
 
     public List<TempRecord> list(Long granaryId, LocalDate recordDate) {
@@ -55,8 +59,10 @@ public class TempService {
         }
         if (!records.findByGranaryIdAndRecordDate(granary.id, input.recordDate).isEmpty()) {
             throw new BizException("仓房 " + granary.name + " " + input.recordDate
-                    + " 已经测过温了，一天只量一次");
+                    + " 已经测过温了，一天只量一次（密闭期测温也不能混进第二条）");
         }
+        // 密闭期间测温照常允许，但这条要盖上「密闭期测温」的戳，跟日常测温区分开。
+        boolean duringFumigation = fumigations.existsBySealedGranaryId(granary.id);
         TempRecord saved = new TempRecord();
         saved.granaryId = granary.id;
         saved.recordDate = input.recordDate;
@@ -64,6 +70,7 @@ public class TempService {
         saved.humidity = input.humidity;
         saved.recorder = input.recorder;
         saved.result = input.temperature >= WARN_TEMPERATURE ? "超温" : "正常";
+        saved.duringFumigation = duringFumigation;
         return records.save(saved);
     }
 }

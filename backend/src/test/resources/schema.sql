@@ -1,5 +1,3 @@
-SET NAMES utf8mb4;
-
 DROP TABLE IF EXISTS fumigation;
 DROP TABLE IF EXISTS stock_move;
 DROP TABLE IF EXISTS temp_record;
@@ -14,7 +12,7 @@ CREATE TABLE granary (
   status VARCHAR(16) NOT NULL,
   PRIMARY KEY (id),
   UNIQUE KEY uk_granary_code (code)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
 
 CREATE TABLE grain_batch (
   id BIGINT NOT NULL AUTO_INCREMENT,
@@ -26,9 +24,8 @@ CREATE TABLE grain_batch (
   moisture DOUBLE NOT NULL,
   status VARCHAR(16) NOT NULL,
   PRIMARY KEY (id),
-  UNIQUE KEY uk_batch_code (code),
-  KEY idx_batch_granary (granary_id, status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  UNIQUE KEY uk_batch_code (code)
+);
 
 CREATE TABLE temp_record (
   id BIGINT NOT NULL AUTO_INCREMENT,
@@ -38,10 +35,10 @@ CREATE TABLE temp_record (
   humidity DOUBLE NOT NULL,
   recorder VARCHAR(32) NOT NULL,
   result VARCHAR(16) NOT NULL,
-  during_fumigation TINYINT(1) NOT NULL DEFAULT 0,
+  during_fumigation TINYINT NOT NULL DEFAULT 0,
   PRIMARY KEY (id),
   UNIQUE KEY uk_temp_granary_date (granary_id, record_date)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+);
 
 CREATE TABLE stock_move (
   id BIGINT NOT NULL AUTO_INCREMENT,
@@ -53,9 +50,8 @@ CREATE TABLE stock_move (
   operator VARCHAR(32) NOT NULL,
   status VARCHAR(16) NOT NULL,
   PRIMARY KEY (id),
-  UNIQUE KEY uk_move_code (code),
-  KEY idx_move_batch (batch_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  UNIQUE KEY uk_move_code (code)
+);
 
 CREATE TABLE fumigation (
   id BIGINT NOT NULL AUTO_INCREMENT,
@@ -76,9 +72,8 @@ CREATE TABLE fumigation (
   version BIGINT NOT NULL DEFAULT 0,
   PRIMARY KEY (id),
   UNIQUE KEY uk_fumigation_code (code),
-  UNIQUE KEY uk_fumigation_sealed_granary (sealed_granary_id),
-  KEY idx_fumigation_granary (granary_id, status)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  UNIQUE KEY uk_fumigation_sealed_granary (sealed_granary_id)
+);
 
 INSERT INTO granary (code, name, capacity, status) VALUES
 ('G-01', '一号仓', 500, '在储'),

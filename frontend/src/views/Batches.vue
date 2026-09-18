@@ -17,6 +17,7 @@
           >
             <span class="vd" :class="'v-' + b.variety">{{ b.variety }}</span>
             <span class="code">{{ b.code }}</span>
+            <span v-if="sealedIdSet.has(b.granaryId)" class="sealtag">密闭中</span>
             <span class="qty">{{ b.quantity }}<i>吨</i></span>
           </div>
           <div v-if="!shown.length" class="none">没有匹配的批次</div>
@@ -48,8 +49,17 @@
             <template v-if="!form.id">
               <el-form-item label="入哪个仓">
                 <el-select v-model="form.granaryId" style="width:100%">
-                  <el-option v-for="g in granaries" :key="g.id" :label="`${g.name}（${g.code}）`" :value="g.id" />
+                  <el-option
+                    v-for="g in granaries"
+                    :key="g.id"
+                    :label="`${g.name}（${g.code}）${sealedIdSet.has(g.id) ? ' · 密闭中' : ''}`"
+                    :value="g.id"
+                    :disabled="sealedIdSet.has(g.id)"
+                  />
                 </el-select>
+                <div v-if="form.granaryId && sealedIdSet.has(form.granaryId)" class="form-warn">
+                  这间仓正在熏蒸密闭中，散气复检合格前不能入粮建批次
+                </div>
               </el-form-item>
               <el-form-item label="入库吨数">
                 <el-input-number v-model="form.quantity" :min="1" />
@@ -90,13 +100,18 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { batchApi, granaryApi } from '../api'
+import { batchApi, granaryApi, fumigationApi } from '../api'
 
 const varieties = ['小麦', '玉米', '稻谷', '大豆']
 const rows = ref([])
 const granaries = ref([])
+const fumigations = ref([])
 const keyword = ref('')
 const form = ref({})
+
+const sealedIdSet = computed(
+  () => new Set(fumigations.value.filter((f) => f.status === '密闭中').map((f) => f.granaryId))
+)
 
 const shown = computed(() => {
   const k = keyword.value.trim()
@@ -122,6 +137,7 @@ async function load() {
 async function loadGranaries() {
   try {
     granaries.value = await granaryApi.list({})
+    fumigations.value = await fumigationApi.list({})
   } catch (e) {
     ElMessage.error(e.message)
   }
@@ -251,6 +267,21 @@ onMounted(async () => {
   font-size: 11px;
   color: #909399;
   margin-left: 2px;
+}
+.sealtag {
+  font-size: 11px;
+  color: #b88230;
+  background: #fdf6ec;
+  border: 1px solid #f5dab1;
+  border-radius: 3px;
+  padding: 0 6px;
+  line-height: 18px;
+}
+.form-warn {
+  font-size: 12px;
+  color: #b88230;
+  margin-top: 6px;
+  line-height: 1.5;
 }
 .none {
   text-align: center;

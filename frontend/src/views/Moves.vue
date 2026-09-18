@@ -12,13 +12,20 @@
           v-for="b in batches"
           :key="b.id"
           class="pick"
-          :class="{ on: form.batchId === b.id, out: b.status === '已出库' }"
+          :class="{
+            on: form.batchId === b.id,
+            out: b.status === '已出库',
+            sealed: sealedIdSet.has(b.granaryId)
+          }"
           @click="choose(b)"
         >
           <div class="p-code">{{ b.code }}</div>
           <div class="p-var">{{ b.variety }}</div>
           <div class="p-qty">{{ b.quantity }} <i>吨</i></div>
-          <div class="p-st">{{ b.status }}</div>
+          <div class="p-st">
+            <span v-if="sealedIdSet.has(b.granaryId)" class="sealmark">{{ granaryName(b.granaryId) }} · 密闭中</span>
+            <span v-else>{{ b.status }}</span>
+          </div>
         </div>
       </div>
 
@@ -88,6 +95,7 @@
           <tr>
             <th style="width:120px">单号</th>
             <th style="width:110px">批次</th>
+            <th style="width:150px">仓房</th>
             <th style="width:90px">类型</th>
             <th style="width:90px">吨数</th>
             <th style="width:120px">日期</th>
@@ -100,6 +108,10 @@
           <tr v-for="m in moves" :key="m.id">
             <td class="mono">{{ m.code }}</td>
             <td class="mono dim">{{ batchCode(m.batchId) }}</td>
+            <td class="dim">
+              {{ granaryName(batchGranary(m.batchId)) }}
+              <span v-if="sealedIdSet.has(batchGranary(m.batchId))" class="sealtag">密闭中</span>
+            </td>
             <td>
               <span class="pill" :class="m.moveType === '入库' ? 'in' : 'out'">{{ m.moveType }}</span>
             </td>
@@ -110,7 +122,12 @@
               <span class="pill" :class="m.status === '已完成' ? 'done' : 'wait'">{{ m.status }}</span>
             </td>
             <td>
-              <span v-if="m.status === '待执行'" class="lnk" @click="execute(m)">执行</span>
+              <template v-if="m.status === '待执行'">
+                <span v-if="sealedIdSet.has(batchGranary(m.batchId))" class="sealblock">
+                  密闭中，禁执行
+                </span>
+                <span v-else class="lnk" @click="execute(m)">执行</span>
+              </template>
               <span v-else class="dim">已执行</span>
             </td>
           </tr>
@@ -123,12 +140,18 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { moveApi, batchApi } from '../api'
+import { moveApi, batchApi, granaryApi, fumigationApi } from '../api'
 
 const moves = ref([])
 const batches = ref([])
+const granaries = ref([])
+const fumigations = ref([])
 const step = ref(0)
 const form = ref({})
+
+const sealedIdSet = computed(
+  () => new Set(fumigations.value.filter((f) => f.status === '密闭中').map((f) => f.granaryId))
+)
 
 const pickedInfo = computed(() => batches.value.find((b) => b.id === form.value.batchId) || {})
 
@@ -161,6 +184,16 @@ function batchCode(id) {
   return hit ? hit.code : id
 }
 
+function batchGranary(id) {
+  const hit = batches.value.find((b) => b.id === id)
+  return hit ? hit.granaryId : null
+}
+
+function granaryName(id) {
+  const hit = granaries.value.find((g) => g.id === id)
+  return hit ? hit.name : '—'
+}
+
 function nextCode() {
   const seq = moves.value
     .map((m) => parseInt(String(m.code).replace(/\D/g, ''), 10) || 0)
@@ -169,6 +202,10 @@ function nextCode() {
 }
 
 function choose(b) {
+  if (sealedIdSet.has(b.granaryId)) {
+    ElMessage.warning(`${granaryName(b.granaryId)} 正在熏蒸密闭中，散气复检合格前禁止出入库`)
+    return
+  }
   form.value.batchId = b.id
 }
 
@@ -176,6 +213,8 @@ async function load() {
   try {
     moves.value = await moveApi.list({})
     batches.value = await batchApi.list({})
+    granaries.value = await granaryApi.list({})
+    fumigations.value = await fumigationApi.list({})
   } catch (e) {
     ElMessage.error(e.message)
   }
@@ -253,6 +292,33 @@ onMounted(load)
 }
 .pick.out {
   opacity: 0.45;
+}
+.pick.sealed {
+  border-color: #f5dab1;
+  background: #fdf8ec;
+  cursor: not-allowed;
+}
+.sealmark {
+  color: #b88230;
+  font-weight: 600;
+}
+.sealblock {
+  color: #b88230;
+  background: #fdf6ec;
+  border: 1px solid #f5dab1;
+  border-radius: 3px;
+  padding: 1px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.sealtag {
+  font-size: 11px;
+  color: #b88230;
+  background: #fdf6ec;
+  border: 1px solid #f5dab1;
+  border-radius: 3px;
+  padding: 0 6px;
+  margin-left: 5px;
 }
 .p-code {
   font-family: monospace;

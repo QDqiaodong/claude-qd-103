@@ -13,7 +13,12 @@
     </div>
 
     <div class="grid">
-      <div v-for="g in shown" :key="g.id" class="cell" :class="{ repair: g.status === '维修' }">
+      <div
+        v-for="g in shown"
+        :key="g.id"
+        class="cell"
+        :class="{ repair: g.status === '维修', sealing: sealedIdSet.has(g.id) }"
+      >
         <div class="ring" :style="ringStyle(g)">
           <div class="hole">
             <b>{{ pct(g) }}<i>%</i></b>
@@ -29,7 +34,8 @@
           <div class="kv"><span>仓容</span><b>{{ g.capacity }}</b>吨</div>
           <div class="kv"><span>在储</span><b class="hl">{{ stored(g.id) }}</b>吨</div>
           <div class="kv"><span>还可入</span><b>{{ g.capacity - stored(g.id) }}</b>吨</div>
-          <div class="st" :class="'st-' + g.status">{{ g.status }}</div>
+          <div v-if="sealedIdSet.has(g.id)" class="st st-密闭">密闭中（熏蒸）</div>
+          <div v-else class="st" :class="'st-' + g.status">{{ g.status }}</div>
         </div>
 
         <span class="edit" @click="openEdit(g)">改</span>
@@ -51,8 +57,15 @@
           <el-select v-model="form.status" style="width:100%">
             <el-option label="空仓" value="空仓" />
             <el-option label="在储" value="在储" />
-            <el-option label="维修" value="维修" />
+            <el-option
+              label="维修"
+              value="维修"
+              :disabled="sealedIdSet.has(form.id)"
+            />
           </el-select>
+          <div v-if="sealedIdSet.has(form.id)" class="form-warn">
+            这间仓正在熏蒸密闭中，散气复检合格前不能改成维修
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -66,14 +79,19 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { granaryApi, batchApi } from '../api'
+import { granaryApi, batchApi, fumigationApi } from '../api'
 
 const rows = ref([])
 const batches = ref([])
+const fumigations = ref([])
 const keyword = ref('')
 const statusFilter = ref('')
 const visible = ref(false)
 const form = ref({})
+
+const sealedIdSet = computed(
+  () => new Set(fumigations.value.filter((f) => f.status === '密闭中').map((f) => f.granaryId))
+)
 
 const shown = computed(() => {
   const k = keyword.value.trim()
@@ -107,6 +125,7 @@ async function load() {
   try {
     rows.value = await granaryApi.list({})
     batches.value = await batchApi.list({})
+    fumigations.value = await fumigationApi.list({})
   } catch (e) {
     ElMessage.error(e.message)
   }
@@ -281,6 +300,20 @@ onMounted(load)
 .st-维修 {
   background: #fef0f0;
   color: #c45656;
+}
+.st-密闭 {
+  background: #fdf6ec;
+  color: #b88230;
+  border: 1px solid #f5dab1;
+}
+.cell.sealing {
+  border-color: #f5dab1;
+}
+.form-warn {
+  font-size: 12px;
+  color: #b88230;
+  margin-top: 6px;
+  line-height: 1.5;
 }
 .edit {
   position: absolute;

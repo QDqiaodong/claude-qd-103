@@ -3,6 +3,7 @@ package com.grain.depot.service;
 import com.grain.depot.dto.BizException;
 import com.grain.depot.entity.GrainBatch;
 import com.grain.depot.entity.Granary;
+import com.grain.depot.repository.FumigationRepository;
 import com.grain.depot.repository.GrainBatchRepository;
 import com.grain.depot.repository.GranaryRepository;
 import java.util.List;
@@ -14,10 +15,13 @@ public class GranaryService {
 
     private final GranaryRepository granaries;
     private final GrainBatchRepository batches;
+    private final FumigationRepository fumigations;
 
-    public GranaryService(GranaryRepository granaries, GrainBatchRepository batches) {
+    public GranaryService(GranaryRepository granaries, GrainBatchRepository batches,
+                          FumigationRepository fumigations) {
         this.granaries = granaries;
         this.batches = batches;
+        this.fumigations = fumigations;
     }
 
     /** 这个仓房现在实际存了多少吨。 */
@@ -71,6 +75,9 @@ public class GranaryService {
             g.capacity = input.capacity;
         }
         if (input.status != null && !input.status.isBlank() && !input.status.equals(g.status)) {
+            if (fumigations.existsBySealedGranaryId(g.id)) {
+                throw new BizException("仓房 " + g.name + " 正在熏蒸密闭中，散气复检合格前不能改状态");
+            }
             if ("维修".equals(input.status) && current > 0) {
                 throw new BizException("这个仓还存着 " + current + " 吨粮，先出空才能进维修");
             }

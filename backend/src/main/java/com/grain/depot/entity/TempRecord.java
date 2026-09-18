@@ -32,4 +32,8 @@ public class TempRecord {
     /** 正常 / 超温 */
     @Column(nullable = false, length = 16)
     public String result;
+
+    /** 这条测温是不是熏蒸密闭期间登的（由服务端判定，不用手填）。 */
+    @Column(name = "during_fumigation", nullable = false)
+    public Boolean duringFumigation;
 }
