@@ -4,6 +4,7 @@ import com.grain.depot.dto.BizException;
 import com.grain.depot.entity.GrainBatch;
 import com.grain.depot.entity.Granary;
 import com.grain.depot.entity.StockMove;
+import com.grain.depot.repository.FumigationRepository;
 import com.grain.depot.repository.GrainBatchRepository;
 import com.grain.depot.repository.GranaryRepository;
 import com.grain.depot.repository.StockMoveRepository;
@@ -17,12 +18,14 @@ public class StockMoveService {
     private final StockMoveRepository moves;
     private final GrainBatchRepository batches;
     private final GranaryRepository granaries;
+    private final FumigationRepository fumigations;
 
     public StockMoveService(StockMoveRepository moves, GrainBatchRepository batches,
-                            GranaryRepository granaries) {
+                            GranaryRepository granaries, FumigationRepository fumigations) {
         this.moves = moves;
         this.batches = batches;
         this.granaries = granaries;
+        this.fumigations = fumigations;
     }
 
     public List<StockMove> list(Long batchId, String moveType, String status) {
@@ -55,6 +58,7 @@ public class StockMoveService {
         }
         GrainBatch batch = batches.findById(input.batchId)
                 .orElseThrow(() -> new BizException("批次不存在"));
+        assertNotSealed(batch.granaryId);
         if ("出库".equals(input.moveType) && input.quantity > batch.quantity) {
             throw new BizException("这批粮库里只有 " + batch.quantity + " 吨，出不了 "
                     + input.quantity + " 吨");
@@ -78,6 +82,7 @@ public class StockMoveService {
         }
         GrainBatch batch = batches.findById(move.batchId)
                 .orElseThrow(() -> new BizException("批次不存在"));
+        assertNotSealed(batch.granaryId);
 
         if ("出库".equals(move.moveType)) {
             if (move.quantity > batch.quantity) {
@@ -103,5 +108,14 @@ public class StockMoveService {
         batches.save(batch);
         move.status = "已完成";
         return moves.save(move);
+    }
+
+    /** 密闭期间作业全停：出入库一律不许动，紧急出库也不行（安监处规矩）。 */
+    private void assertNotSealed(Long granaryId) {
+        if (!fumigations.findByGranaryIdAndStatus(granaryId, "密闭中").isEmpty()) {
+            Granary granary = granaries.findById(granaryId).orElse(null);
+            String name = granary == null ? String.valueOf(granaryId) : granary.name;
+            throw new BizException("仓房 " + name + " 正在熏蒸密闭中，出入库作业全停，复检合格后才能恢复");
+        }
     }
 }

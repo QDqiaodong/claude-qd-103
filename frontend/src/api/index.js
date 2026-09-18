@@ -33,4 +33,11 @@ export const moveApi = {
   execute: (id) => http.post(`/moves/${id}/execute`)
 }
 
+export const fumigationApi = {
+  list: (params) => http.get('/fumigations', { params }),
+  create: (data) => http.post('/fumigations', data),
+  start: (id) => http.post(`/fumigations/${id}/start`),
+  release: (id, data) => http.post(`/fumigations/${id}/release`, data)
+}
+
 export default http

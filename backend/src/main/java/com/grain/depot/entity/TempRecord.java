@@ -32,4 +32,8 @@ public class TempRecord {
     /** 正常 / 超温 */
     @Column(nullable = false, length = 16)
     public String result;
+
+    /** 日常测温 / 密闭测温（密闭期登记的自动记密闭测温，由服务端判） */
+    @Column(length = 16)
+    public String scene;
 }

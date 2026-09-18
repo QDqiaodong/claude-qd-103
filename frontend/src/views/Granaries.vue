@@ -13,7 +13,12 @@
     </div>
 
     <div class="grid">
-      <div v-for="g in shown" :key="g.id" class="cell" :class="{ repair: g.status === '维修' }">
+      <div
+        v-for="g in shown"
+        :key="g.id"
+        class="cell"
+        :class="{ repair: g.status === '维修', sealed: isSealed(g.id) }"
+      >
         <div class="ring" :style="ringStyle(g)">
           <div class="hole">
             <b>{{ pct(g) }}<i>%</i></b>
@@ -30,6 +35,7 @@
           <div class="kv"><span>在储</span><b class="hl">{{ stored(g.id) }}</b>吨</div>
           <div class="kv"><span>还可入</span><b>{{ g.capacity - stored(g.id) }}</b>吨</div>
           <div class="st" :class="'st-' + g.status">{{ g.status }}</div>
+          <div v-if="isSealed(g.id)" class="st seal-badge">熏蒸密闭中 · 作业全停</div>
         </div>
 
         <span class="edit" @click="openEdit(g)">改</span>
@@ -51,9 +57,16 @@
           <el-select v-model="form.status" style="width:100%">
             <el-option label="空仓" value="空仓" />
             <el-option label="在储" value="在储" />
-            <el-option label="维修" value="维修" />
+            <el-option
+              label="维修（密闭中不可选）"
+              value="维修"
+              :disabled="form.id ? isSealed(form.id) : false"
+            />
           </el-select>
         </el-form-item>
+        <div v-if="form.id && isSealed(form.id)" class="seal-note">
+          这间仓正在熏蒸密闭中，不能改成维修；散气复检合格后才恢复。
+        </div>
       </el-form>
       <template #footer>
         <el-button @click="visible = false">取消</el-button>
@@ -66,14 +79,19 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { granaryApi, batchApi } from '../api'
+import { granaryApi, batchApi, fumigationApi } from '../api'
 
 const rows = ref([])
 const batches = ref([])
+const fumigations = ref([])
 const keyword = ref('')
 const statusFilter = ref('')
 const visible = ref(false)
 const form = ref({})
+
+function isSealed(granaryId) {
+  return fumigations.value.some((f) => f.granaryId === granaryId && f.status === '密闭中')
+}
 
 const shown = computed(() => {
   const k = keyword.value.trim()
@@ -105,8 +123,14 @@ function ringStyle(g) {
 
 async function load() {
   try {
-    rows.value = await granaryApi.list({})
-    batches.value = await batchApi.list({})
+    const [g, b, f] = await Promise.all([
+      granaryApi.list({}),
+      batchApi.list({}),
+      fumigationApi.list({})
+    ])
+    rows.value = g
+    batches.value = b
+    fumigations.value = f
   } catch (e) {
     ElMessage.error(e.message)
   }
@@ -196,6 +220,23 @@ onMounted(load)
 }
 .cell.repair {
   opacity: 0.6;
+}
+.cell.sealed {
+  border-color: #f5b7b7;
+  box-shadow: inset 0 0 0 1px #fbc4c4;
+}
+.seal-badge {
+  background: #fef0f0 !important;
+  color: #c45656 !important;
+  font-weight: 600;
+}
+.seal-note {
+  font-size: 12px;
+  color: #c45656;
+  background: #fef0f0;
+  border-radius: 5px;
+  padding: 8px 12px;
+  line-height: 1.6;
 }
 .ring {
   width: 88px;

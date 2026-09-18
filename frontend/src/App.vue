@@ -7,6 +7,7 @@
         <el-menu-item index="/batches">粮食批次</el-menu-item>
         <el-menu-item index="/temps">粮情测温</el-menu-item>
         <el-menu-item index="/moves">出入库作业</el-menu-item>
+        <el-menu-item index="/fumigations">熏蒸作业</el-menu-item>
       </el-menu>
     </el-header>
     <el-main>

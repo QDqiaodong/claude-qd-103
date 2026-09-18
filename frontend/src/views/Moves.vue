@@ -12,13 +12,17 @@
           v-for="b in batches"
           :key="b.id"
           class="pick"
-          :class="{ on: form.batchId === b.id, out: b.status === '已出库' }"
+          :class="{ on: form.batchId === b.id, out: b.status === '已出库', locked: isSealedBatch(b) }"
           @click="choose(b)"
         >
+          <span v-if="isSealedBatch(b)" class="lock-tag">熏蒸密闭中</span>
           <div class="p-code">{{ b.code }}</div>
           <div class="p-var">{{ b.variety }}</div>
           <div class="p-qty">{{ b.quantity }} <i>吨</i></div>
-          <div class="p-st">{{ b.status }}</div>
+          <div class="p-st">
+            {{ b.status }}
+            <template v-if="isSealedBatch(b)"> · 所在仓密闭，作业全停</template>
+          </div>
         </div>
       </div>
 
@@ -66,6 +70,7 @@
         <div class="warn">
           提交后这张单子先落在「待执行」，真正加减在库吨数是在点「执行」那一刻 ——
           执行时才会校验出库不超在库、入库不破仓容。
+          <b>仓房熏蒸密闭期间，出入库作业全停（开单、执行都挡），复检合格后才恢复。</b>
         </div>
       </div>
     </div>
@@ -97,7 +102,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="m in moves" :key="m.id">
+          <tr v-for="m in moves" :key="m.id" :class="{ sealedrow: isSealedMove(m) }">
             <td class="mono">{{ m.code }}</td>
             <td class="mono dim">{{ batchCode(m.batchId) }}</td>
             <td>
@@ -108,9 +113,13 @@
             <td class="dim">{{ m.operator }}</td>
             <td>
               <span class="pill" :class="m.status === '已完成' ? 'done' : 'wait'">{{ m.status }}</span>
+              <span v-if="isSealedMove(m)" class="sealflag">仓密闭中</span>
             </td>
             <td>
-              <span v-if="m.status === '待执行'" class="lnk" @click="execute(m)">执行</span>
+              <template v-if="m.status === '待执行'">
+                <span v-if="isSealedMove(m)" class="dim locktxt">🔒 密闭停作业，复检合格后可执行</span>
+                <span v-else class="lnk" @click="execute(m)">执行</span>
+              </template>
               <span v-else class="dim">已执行</span>
             </td>
           </tr>
@@ -123,14 +132,30 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { moveApi, batchApi } from '../api'
+import { moveApi, batchApi, fumigationApi } from '../api'
 
 const moves = ref([])
 const batches = ref([])
+const fumigations = ref([])
 const step = ref(0)
 const form = ref({})
 
 const pickedInfo = computed(() => batches.value.find((b) => b.id === form.value.batchId) || {})
+
+function sealedGranaryIds() {
+  return new Set(
+    fumigations.value.filter((f) => f.status === '密闭中').map((f) => f.granaryId)
+  )
+}
+
+function isSealedBatch(b) {
+  return sealedGranaryIds().has(b.granaryId)
+}
+
+function isSealedMove(m) {
+  const b = batches.value.find((x) => x.id === m.batchId)
+  return b ? sealedGranaryIds().has(b.granaryId) : false
+}
 
 const canNext = computed(() => {
   if (step.value === 0) return !!form.value.batchId
@@ -169,13 +194,23 @@ function nextCode() {
 }
 
 function choose(b) {
+  if (isSealedBatch(b)) {
+    ElMessage.error('这批粮所在仓正在熏蒸密闭中，出入库作业全停，复检合格后才能开单')
+    return
+  }
   form.value.batchId = b.id
 }
 
 async function load() {
   try {
-    moves.value = await moveApi.list({})
-    batches.value = await batchApi.list({})
+    const [m, b, f] = await Promise.all([
+      moveApi.list({}),
+      batchApi.list({}),
+      fumigationApi.list({})
+    ])
+    moves.value = m
+    batches.value = b
+    fumigations.value = f
   } catch (e) {
     ElMessage.error(e.message)
   }
@@ -236,6 +271,7 @@ onMounted(load)
   gap: 12px;
 }
 .pick {
+  position: relative;
   border: 1px solid #e4e7ed;
   border-radius: 7px;
   padding: 13px 15px;
@@ -253,6 +289,21 @@ onMounted(load)
 }
 .pick.out {
   opacity: 0.45;
+}
+.pick.locked {
+  border-color: #fbc4c4;
+  background: #fef6f6;
+  cursor: not-allowed;
+}
+.lock-tag {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 10px;
+  color: #c45656;
+  background: #fef0f0;
+  border-radius: 3px;
+  padding: 1px 6px;
 }
 .p-code {
   font-family: monospace;
@@ -468,5 +519,24 @@ onMounted(load)
 }
 .lnk:hover {
   text-decoration: underline;
+}
+.sealedrow {
+  background: #fffafa;
+}
+.sealflag {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 10px;
+  color: #c45656;
+  background: #fef0f0;
+  border-radius: 3px;
+  padding: 1px 6px;
+}
+.locktxt {
+  white-space: nowrap;
+  cursor: not-allowed;
+}
+.warn b {
+  color: #c45656;
 }
 </style>

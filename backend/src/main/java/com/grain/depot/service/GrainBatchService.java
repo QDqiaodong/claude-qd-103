@@ -3,6 +3,7 @@ package com.grain.depot.service;
 import com.grain.depot.dto.BizException;
 import com.grain.depot.entity.GrainBatch;
 import com.grain.depot.entity.Granary;
+import com.grain.depot.repository.FumigationRepository;
 import com.grain.depot.repository.GrainBatchRepository;
 import com.grain.depot.repository.GranaryRepository;
 import java.util.List;
@@ -14,10 +15,13 @@ public class GrainBatchService {
 
     private final GrainBatchRepository batches;
     private final GranaryRepository granaries;
+    private final FumigationRepository fumigations;
 
-    public GrainBatchService(GrainBatchRepository batches, GranaryRepository granaries) {
+    public GrainBatchService(GrainBatchRepository batches, GranaryRepository granaries,
+                             FumigationRepository fumigations) {
         this.batches = batches;
         this.granaries = granaries;
+        this.fumigations = fumigations;
     }
 
     public List<GrainBatch> list(Long granaryId, String status, String variety) {
@@ -49,6 +53,9 @@ public class GrainBatchService {
                 .orElseThrow(() -> new BizException("仓房不存在"));
         if ("维修".equals(granary.status)) {
             throw new BizException("仓房 " + granary.name + " 正在维修，不能入粮");
+        }
+        if (!fumigations.findByGranaryIdAndStatus(granary.id, "密闭中").isEmpty()) {
+            throw new BizException("仓房 " + granary.name + " 正在熏蒸密闭中，不能往这间仓建在储批次");
         }
         int stored = batches.findByGranaryIdAndStatus(granary.id, "在储").stream()
                 .mapToInt(b -> b.quantity)

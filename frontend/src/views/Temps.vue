@@ -24,14 +24,18 @@
             <th class="rowhead">
               {{ g.name }}
               <em>{{ g.code }}</em>
+              <i v-if="isSealed(g.id)" class="seal-now">密闭中</i>
             </th>
             <td
               v-for="d in dates"
               :key="d"
-              :class="{ hot: isHot(g.id, d), empty: !cell(g.id, d) }"
+              :class="{ hot: isHot(g.id, d), sealed: isSealedCell(g.id, d), empty: !cell(g.id, d) }"
               :title="tip(g.id, d)"
             >
-              <span v-if="cell(g.id, d)">{{ cell(g.id, d).temperature }}</span>
+              <span v-if="cell(g.id, d)">
+                {{ cell(g.id, d).temperature }}
+                <i v-if="cell(g.id, d).scene === '密闭测温'" class="gas">熏</i>
+              </span>
               <span v-else>—</span>
             </td>
             <td class="avg">{{ avg(g.id) }}</td>
@@ -44,6 +48,7 @@
       <span><i class="dot normal"></i>正常（＜26℃）</span>
       <span><i class="dot hot"></i>超温（≥26℃）</span>
       <span><i class="dot none"></i>当天没测</span>
+      <span><i class="gas-leg">熏</i>密闭期测温（自动判定，当天只准一条）</span>
       <span class="grow" />
       <span class="note">鼠标停在格子上能看到湿度和记录人</span>
     </div>
@@ -68,7 +73,10 @@
           <el-input v-model="form.recorder" placeholder="如 李保管" />
         </el-form-item>
       </el-form>
-      <div class="dlg-tip">登记后结论（正常 / 超温）由服务端自动判定，不用手填。</div>
+      <div class="dlg-tip">
+        登记后结论（正常 / 超温）由服务端自动判定，不用手填。
+        仓房熏蒸密闭期仍可测温，会自动记为「密闭测温」；同一仓同一天只准一条，混不进日常测温。
+      </div>
       <template #footer>
         <el-button @click="visible = false">取消</el-button>
         <el-button type="primary" @click="save">提交</el-button>
@@ -80,15 +88,33 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { tempApi, granaryApi } from '../api'
+import { tempApi, granaryApi, fumigationApi } from '../api'
 
 const rows = ref([])
 const granaries = ref([])
+const fumigations = ref([])
 const visible = ref(false)
 const form = ref({})
 
 const dates = computed(() => [...new Set(rows.value.map((r) => r.recordDate))].sort())
 const lastDate = computed(() => dates.value[dates.value.length - 1] || '')
+
+function activeFumigations(granaryId) {
+  return fumigations.value.filter((f) => f.granaryId === granaryId)
+}
+
+function isSealed(granaryId) {
+  return fumigations.value.some((f) => f.granaryId === granaryId && f.status === '密闭中')
+}
+
+// 这天这间仓是否在密闭期（已放行的单按计划散气日截止）。
+function isSealedCell(granaryId, date) {
+  return activeFumigations(granaryId).some((f) => {
+    if (date < f.sealDate) return false
+    if (f.status === '密闭中') return true
+    return f.status === '已完成' && date <= f.aerationDate
+  })
+}
 
 function cell(granaryId, date) {
   return rows.value.find((r) => r.granaryId === granaryId && r.recordDate === date) || null
@@ -102,7 +128,8 @@ function isHot(granaryId, date) {
 function tip(granaryId, date) {
   const c = cell(granaryId, date)
   if (!c) return '这天还没测'
-  return `湿度 ${c.humidity}%　${c.recorder}　${c.result}`
+  const scene = c.scene === '密闭测温' ? '【密闭期测温】' : ''
+  return `${scene}湿度 ${c.humidity}%　${c.recorder}　${c.result}`
 }
 
 function avg(granaryId) {
@@ -121,7 +148,9 @@ async function load() {
 
 async function loadGranaries() {
   try {
-    granaries.value = await granaryApi.list({})
+    const [g, f] = await Promise.all([granaryApi.list({}), fumigationApi.list({})])
+    granaries.value = g
+    fumigations.value = f
   } catch (e) {
     ElMessage.error(e.message)
   }
@@ -246,6 +275,40 @@ td.hot {
   background: #fef0f0;
   color: #f56c6c;
   font-weight: 700;
+}
+td.sealed {
+  background: #fdf4ec;
+}
+.gas {
+  display: inline-block;
+  font-style: normal;
+  font-size: 9px;
+  line-height: 1;
+  color: #fff;
+  background: #e6a23c;
+  border-radius: 2px;
+  padding: 2px 3px;
+  margin-left: 2px;
+  vertical-align: super;
+}
+.gas-leg {
+  display: inline-block;
+  font-style: normal;
+  font-size: 9px;
+  color: #fff;
+  background: #e6a23c;
+  border-radius: 2px;
+  padding: 2px 4px;
+  margin-right: 6px;
+}
+.seal-now {
+  font-style: normal;
+  font-size: 10px;
+  color: #fff;
+  background: #c45656;
+  border-radius: 8px;
+  padding: 0 7px;
+  margin-left: 6px;
 }
 td.avg,
 th.avg {

@@ -17,6 +17,7 @@
           >
             <span class="vd" :class="'v-' + b.variety">{{ b.variety }}</span>
             <span class="code">{{ b.code }}</span>
+            <span v-if="isSealed(b.granaryId)" class="sealtag">仓密闭中</span>
             <span class="qty">{{ b.quantity }}<i>吨</i></span>
           </div>
           <div v-if="!shown.length" class="none">没有匹配的批次</div>
@@ -48,7 +49,13 @@
             <template v-if="!form.id">
               <el-form-item label="入哪个仓">
                 <el-select v-model="form.granaryId" style="width:100%">
-                  <el-option v-for="g in granaries" :key="g.id" :label="`${g.name}（${g.code}）`" :value="g.id" />
+                  <el-option
+                    v-for="g in granaries"
+                    :key="g.id"
+                    :label="isSealed(g.id) ? `${g.name}（${g.code}）· 熏蒸密闭中，不能入粮` : `${g.name}（${g.code}）`"
+                    :value="g.id"
+                    :disabled="isSealed(g.id)"
+                  />
                 </el-select>
               </el-form-item>
               <el-form-item label="入库吨数">
@@ -90,13 +97,18 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { batchApi, granaryApi } from '../api'
+import { batchApi, granaryApi, fumigationApi } from '../api'
 
 const varieties = ['小麦', '玉米', '稻谷', '大豆']
 const rows = ref([])
 const granaries = ref([])
+const fumigations = ref([])
 const keyword = ref('')
 const form = ref({})
+
+function isSealed(granaryId) {
+  return fumigations.value.some((f) => f.granaryId === granaryId && f.status === '密闭中')
+}
 
 const shown = computed(() => {
   const k = keyword.value.trim()
@@ -121,7 +133,9 @@ async function load() {
 
 async function loadGranaries() {
   try {
-    granaries.value = await granaryApi.list({})
+    const [g, f] = await Promise.all([granaryApi.list({}), fumigationApi.list({})])
+    granaries.value = g
+    fumigations.value = f
   } catch (e) {
     ElMessage.error(e.message)
   }
@@ -239,6 +253,13 @@ onMounted(async () => {
   font-family: monospace;
   font-size: 13px;
   color: #303133;
+}
+.sealtag {
+  font-size: 10px;
+  color: #c45656;
+  background: #fef0f0;
+  border-radius: 3px;
+  padding: 1px 6px;
 }
 .qty {
   margin-left: auto;
